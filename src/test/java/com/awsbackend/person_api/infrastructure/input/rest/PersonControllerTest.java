@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -39,7 +40,7 @@ class PersonControllerTest {
         when(personService.savePerson(any(Person.class))).thenReturn(person);
 
         mockMvc.perform(post("/person/save")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"1\",\"name\":\"Evelyn\",\"email\":\"evelyn@mail.com\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value("1"))
@@ -61,10 +62,36 @@ class PersonControllerTest {
 
     @Test
     void getPersonById_shouldReturn404IfNotFound() throws Exception {
-        when(personService.getPersonById("99")).thenThrow(new PersonNotFoundException("99"));
+        when(personService.getPersonById("99"))
+                .thenThrow(new PersonNotFoundException("99"));
 
         mockMvc.perform(get("/person/get/99"))
                 .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Person with id 99 not found"));
     }
+
+    @Test
+    void savePerson_shouldReturn400IfInvalid() throws Exception {
+        // name vacío -> debe fallar la validación de @Valid en el controller
+        mockMvc.perform(post("/person/save")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\":\"1\",\"name\":\"\",\"email\":\"not-an-email\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void getPersonById_shouldReturn500OnUnexpectedError() throws Exception {
+        when(personService.getPersonById("500"))
+                .thenThrow(new RuntimeException("Unexpected failure"));
+
+        mockMvc.perform(get("/person/get/500"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error").value("Unexpected error occurred"))
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.timestamp").exists());
+    }
+
 }
